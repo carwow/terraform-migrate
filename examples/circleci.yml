@@ -1,0 +1,84 @@
+version: 2.1
+
+executors:
+  terraform:
+    docker:
+      - image: hashicorp/terraform:latest
+
+commands:
+  plan:
+    description: "Init, migrate, plan"
+    steps:
+      - run:
+          name: Init
+          command: terraform init -lock-timeout=60s
+      - run:
+          name: Migrate
+          command: |
+            if [[ "$CIRCLE_BRANCH" == "master" ]]; then
+              terraform-migrate apply
+            else
+              terraform-migrate init
+              terraform-migrate plan
+            fi
+      - run:
+          name: Plan
+          command: terraform plan -out=plan -lock-timeout=60s
+      - persist_to_workspace:
+          root: .
+          paths:
+            - plan
+
+  apply:
+    description: "Apply!"
+    steps:
+      - attach_workspace:
+          at: .
+      - run:
+          name: Apply!
+          command: |
+            terraform init
+            terraform apply "plan"
+
+jobs:
+  lint:
+    executor: terraform
+    steps:
+      - checkout
+      - run:
+          name: fmt
+          command: terraform fmt -recursive -check
+      - run:
+          name: validate
+          command: terraform validate
+
+  plan:
+    executor: terraform
+    steps:
+      - checkout
+      - plan
+
+  apply:
+    executor: terraform
+    steps:
+      - checkout
+      - apply
+
+workflows:
+  version: 2
+  build-and-deploy:
+    jobs:
+      - lint
+      - plan:
+          requires: [lint]
+      - hold:
+          type: approval
+          requires: [plan]
+          filters:
+            branches:
+              only: master
+      - apply:
+          requires: [hold]
+          filters:
+            branches:
+              only: master
