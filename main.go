@@ -101,7 +101,7 @@ func local(args []string) error {
 		return nil
 	}
 
-	err = disableTerraformBackend()
+	err = disableTerraformBackendOrSkip()
 	if err != nil {
 		return err
 	}
@@ -209,6 +209,18 @@ func findMigrationFile(migrationsDir string, version int) (string, error) {
 	}
 
 	return files[0], nil
+}
+
+func disableTerraformBackendOrSkip() error {
+	_, err := os.Stat("backend.tf.disable")
+	if err == nil {
+		return nil
+	}
+	if os.IsNotExist(err) {
+		return disableTerraformBackend()
+	}
+
+	return err
 }
 
 func disableTerraformBackend() error {
