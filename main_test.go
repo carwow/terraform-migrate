@@ -49,7 +49,7 @@ func TestGetCurrentVersionIsNotNumber(t *testing.T) {
 
 func TestFindMigrationFileWithNoFile(t *testing.T) {
 	file, err := findMigrationFile("migrate_test", 1)
-	if err != nil {
+	if err.Error() != "no migration file found" {
 		t.Error(err)
 	}
 	if file != "" {
@@ -68,7 +68,7 @@ func TestFindMigrationFileWithFiles(t *testing.T) {
 	os.Create("migrate_test/3_d.sh")
 
 	file, err := findMigrationFile("migrate_test", 1)
-	if err != nil {
+	if err.Error() != "no migration file found" {
 		t.Error(err)
 	}
 	if file != "" {

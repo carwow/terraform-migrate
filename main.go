@@ -27,8 +27,8 @@ func main() {
 		help()
 	case "init":
 		err = initCmd()
-	case "plan":
-		err = plan()
+	case "local":
+		err = local(os.Args)
 	case "apply":
 		err = apply()
 	case "force-unlock":
@@ -50,12 +50,17 @@ func help() {
 Commands:
 	init			sets up lock in CircleCI
 				requires CIRCLE_TOKEN environment variable
-	plan			runs next migration file locally
+
+	local [VERSION]		runs next migration file against a local copy
+				of the terraform state
 				requires backend.tf file to include terraform
 				backend config
+
 	apply			runs next migration file
+
 	force-unlock		releases lock in CircleCI
 				requires CIRCLE_TOKEN environment variable
+
 	help			displays this text
 `, path.Base(os.Args[0]))
 }
@@ -69,10 +74,25 @@ func initCmd() error {
 	return unlock()
 }
 
-const migrationsDir = "../../migrations"
+const migrationsDir = "migrations"
 
-func plan() error {
-	migration, err := findNextMigration(migrationsDir)
+func local(args []string) error {
+	var nextVersion int
+	var err error
+
+	switch len(args) {
+	case 2:
+		nextVersion, err = getNextVersion()
+	case 3:
+		nextVersion, err = strconv.Atoi(args[2])
+	default:
+		err = fmt.Errorf("Too many arguments!")
+	}
+	if err != nil {
+		return err
+	}
+
+	migration, err := findNextMigration(nextVersion, migrationsDir)
 	if err != nil {
 		return err
 	}
@@ -95,7 +115,11 @@ func plan() error {
 }
 
 func apply() error {
-	migration, err := findNextMigration(migrationsDir)
+	nextVersion, err := getNextVersion()
+	if err != nil {
+		return err
+	}
+	migration, err := findNextMigration(nextVersion, migrationsDir)
 	if err != nil {
 		return err
 	}
@@ -132,19 +156,22 @@ type migration struct {
 	file    string
 }
 
-func findNextMigration(migrationsDir string) (*migration, error) {
+func getNextVersion() (int, error) {
 	currentVersion, err := getCurrentVersion()
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	nextVersion := currentVersion + 1
+	return currentVersion + 1, nil
+}
+
+func findNextMigration(nextVersion int, migrationsDir string) (*migration, error) {
 	file, err := findMigrationFile(migrationsDir, nextVersion)
 	if err != nil {
 		return nil, err
 	}
 	if file == "" {
-		return nil, nil
+		return nil, fmt.Errorf("No migration file")
 	}
 
 	return &migration{
@@ -175,7 +202,7 @@ func findMigrationFile(migrationsDir string, version int) (string, error) {
 		return "", fmt.Errorf("failed to find migration file: %s", err)
 	}
 	if len(files) == 0 {
-		return "", nil
+		return "", fmt.Errorf("no migration file found")
 	}
 	if len(files) > 1 {
 		return "", fmt.Errorf("%d files found with version %d", len(files), version)
